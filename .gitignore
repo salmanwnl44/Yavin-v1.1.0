@@ -1,0 +1,30 @@
+# Node
+node_modules/
+/dist
+/build
+/release
+/out
+
+# Electron / Build Artifacts
+*.exe
+*.asar
+*.zip
+*.dmg
+*.pkg
+*.snap
+*.AppImage
+
+# Python
+__pycache__/
+*.pyc
+.env
+.venv/
+
+# VSCode
+.vscode/
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
