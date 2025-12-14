@@ -91,5 +91,15 @@ contextBridge.exposeInMainWorld('electron', {
         install: (url) => ipcRenderer.invoke('extension:install', url),
         list: () => ipcRenderer.invoke('extension:list'),
         uninstall: (id) => ipcRenderer.invoke('extension:uninstall', id),
+    },
+
+    // Window Controls
+    ipcRenderer: {
+        send: (channel, ...args) => {
+            const validChannels = ['window:minimize', 'window:maximize', 'window:close'];
+            if (validChannels.includes(channel)) {
+                ipcRenderer.send(channel, ...args);
+            }
+        }
     }
 });

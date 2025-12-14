@@ -32,6 +32,8 @@ function createWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.cjs'),
         },
+        frame: false, // Use custom title bar
+        titleBarStyle: 'hidden',
     });
 
     // In production, load the local file. In dev, load the Vite server.
@@ -57,6 +59,25 @@ function createWindow() {
         if (terminalManager) {
             terminalManager.killAll();
         }
+    });
+
+    // Window Control Handlers
+    ipcMain.on('window:minimize', () => {
+        if (mainWindow) mainWindow.minimize();
+    });
+
+    ipcMain.on('window:maximize', () => {
+        if (mainWindow) {
+            if (mainWindow.isMaximized()) {
+                mainWindow.unmaximize();
+            } else {
+                mainWindow.maximize();
+            }
+        }
+    });
+
+    ipcMain.on('window:close', () => {
+        if (mainWindow) mainWindow.close();
     });
 }
 
@@ -296,34 +317,13 @@ function setupGitHandlers() {
     });
 }
 
-const ExtensionManager = require('./extensionManager.cjs');
+// Extension Manager removed
 
 
 
-function setupExtensionHandlers() {
-    const extensionManager = new ExtensionManager();
-
-    ipcMain.handle('extension:install', async (event, url) => {
-        try {
-            console.log('Downloading extension from:', url);
-            const tempPath = await extensionManager.downloadExtension(url);
-            console.log('Installing extension from:', tempPath);
-            const result = await extensionManager.installExtension(tempPath);
-            return result;
-        } catch (error) {
-            console.error('Extension install failed:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('extension:list', async () => {
-        return extensionManager.getInstalledExtensions();
-    });
-
-    ipcMain.handle('extension:uninstall', async (event, id) => {
-        return extensionManager.uninstallExtension(id);
-    });
-}
+// function setupExtensionHandlers() {
+// Extension handlers removed
+// }
 
 function setupShellHandlers() {
     const { shell } = require('electron');
@@ -387,7 +387,7 @@ app.on('ready', () => {
         setupFileSystemHandlers();
         setupShellHandlers();
         setupGitHandlers();
-        setupExtensionHandlers();
+        // setupExtensionHandlers();
         console.log('Terminal handlers initialized successfully');
     } catch (error) {
         console.error('Failed to initialize terminal handlers:', error);

@@ -8,76 +8,52 @@ export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
     const xtermRef = useRef(null);
     const fitAddonRef = useRef(null);
     const terminalIdRef = useRef(null);
+    const resizeObserverRef = useRef(null);
 
     useEffect(() => {
-        if (!terminalRef.current || !window.electron?.terminal) return;
+        if (!terminalRef.current) return;
 
-        let mounted = true;
+        let term = null;
+        let fitAddon = null;
         let resizeObserver = null;
+        let backendCleanup = null;
+        let isInitialized = false;
 
         const initTerminal = async () => {
-            // Wait for container to have dimensions (poll up to 1 second)
-            let attempts = 0;
-            while ((!terminalRef.current || terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) && attempts < 20) {
-                await new Promise(resolve => setTimeout(resolve, 50));
-                if (!mounted) return;
-                attempts++;
-            }
+            if (isInitialized) return;
+            if (!terminalRef.current) return;
 
-            if (!terminalRef.current || terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) {
-                console.warn('Terminal container has no dimensions after waiting. Initialization aborted.');
-                return;
-            }
+            // Check dimensions
+            const { clientWidth, clientHeight } = terminalRef.current;
+            if (clientWidth === 0 || clientHeight === 0) return;
 
-            // Create XTerm instance
-            const term = new XTerm({
+            isInitialized = true;
+
+            // Initialize XTerm
+            term = new XTerm({
                 cursorBlink: true,
                 theme: {
                     background: '#0a0e14',
                     foreground: '#d4d4d4',
                     cursor: '#ffffff',
-                    black: '#000000',
-                    red: '#e06c75',
-                    green: '#98c379',
-                    yellow: '#d19a66',
-                    blue: '#61afef',
-                    magenta: '#c678dd',
-                    cyan: '#56b6c2',
-                    white: '#abb2bf',
-                    brightBlack: '#5c6370',
-                    brightRed: '#e06c75',
-                    brightGreen: '#98c379',
-                    brightYellow: '#d19a66',
-                    brightBlue: '#61afef',
-                    brightMagenta: '#c678dd',
-                    brightCyan: '#56b6c2',
-                    brightWhite: '#ffffff',
+                    selectionBackground: 'rgba(255, 255, 255, 0.3)',
                 },
                 fontFamily: 'Consolas, "Courier New", monospace',
                 fontSize: 14,
-                lineHeight: 1.2,
                 allowProposedApi: true
             });
 
-            const fitAddon = new FitAddon();
+            fitAddon = new FitAddon();
             term.loadAddon(fitAddon);
 
-            // Open terminal in the container
             term.open(terminalRef.current);
+            xtermRef.current = term;
+            fitAddonRef.current = fitAddon;
 
-            // Wait for terminal to be fully initialized before fitting
-            // This ensures the viewport and all internal structures are ready
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            if (!mounted) return;
-
-            // Initial fit with proper checks
+            // Initial fit with delay to ensure layout needs
             requestAnimationFrame(() => {
-                if (!mounted || !terminalRef.current) return;
                 try {
-                    // Verify terminal element exists and has dimensions
-                    const element = term.element;
-                    if (element && element.clientWidth > 0 && element.clientHeight > 0) {
+                    if (terminalRef.current && terminalRef.current.clientWidth > 0) {
                         fitAddon.fit();
                     }
                 } catch (e) {
@@ -85,133 +61,115 @@ export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
                 }
             });
 
-            xtermRef.current = term;
-            fitAddonRef.current = fitAddon;
 
-            // Map shell types to actual shell paths
-            const shellMap = {
-                'powershell': 'powershell.exe',
-                'cmd': 'cmd.exe',
-                'git-bash': 'D:\\Program Files\\Git\\bin\\bash.exe',
-                'node': 'powershell.exe', // JavaScript Debug Terminal uses PowerShell
-            };
+            // Create Backend Terminal
+            if (!window.electron?.terminal) {
+                term.writeln('\x1b[33mTerminal backend not available.\x1b[0m');
+                return;
+            }
 
-            const shellPath = shellMap[shellType] || shellType;
-
-            // Create terminal process
             try {
+                // Map shellType to path if needed, or pass as is
+                const shellMap = {
+                    'powershell': 'powershell.exe',
+                    'cmd': 'cmd.exe',
+                    'git-bash': 'D:\\Program Files\\Git\\bin\\bash.exe', // Try user's path
+                };
+                // If it's a known key, use mapped value, else use it as is (if it's a path)
+                const shellPath = shellMap[shellType] || shellType;
+
                 const result = await window.electron.terminal.create({
                     shell: shellPath,
+                    cwd: cwd,
                     cols: term.cols,
-                    rows: term.rows,
-                    cwd: cwd || undefined,
+                    rows: term.rows
                 });
-
-                if (!mounted) return;
 
                 if (result.success) {
                     terminalIdRef.current = result.id;
 
-                    // Handle incoming data
+                    // Listen for data
                     const unsubscribeData = window.electron.terminal.onData((id, data) => {
-                        if (id === terminalIdRef.current && xtermRef.current) {
-                            xtermRef.current.write(data);
+                        if (id === terminalIdRef.current) {
+                            term.write(data);
                         }
                     });
 
-                    // Handle terminal exit
-                    const unsubscribeExit = window.electron.terminal.onExit((id, exitCode) => {
-                        if (id === terminalIdRef.current && xtermRef.current) {
-                            xtermRef.current.write(`\r\n\x1b[33mProcess exited with code ${exitCode}\x1b[0m\r\n`);
+                    // Listen for exit
+                    const unsubscribeExit = window.electron.terminal.onExit((id, code) => {
+                        if (id === terminalIdRef.current) {
+                            term.writeln(`\r\n\x1b[33mTerminal exited with code ${code}\x1b[0m`);
                         }
                     });
 
-                    // Handle user input
-                    term.onData((data) => {
-                        if (terminalIdRef.current) {
-                            window.electron.terminal.write(terminalIdRef.current, data);
-                        }
+                    // Write data to backend
+                    term.onData(data => {
+                        window.electron.terminal.write(terminalIdRef.current, data);
                     });
 
-                    // Setup ResizeObserver for robust resizing
-                    resizeObserver = new ResizeObserver(() => {
-                        if (fitAddonRef.current && terminalIdRef.current && xtermRef.current) {
-                            requestAnimationFrame(() => {
-                                if (!terminalRef.current || terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
-
-                                // Ensure terminal element and viewport are ready
-                                const element = xtermRef.current.element;
-                                if (!element || element.clientWidth === 0 || element.clientHeight === 0) return;
-
-                                try {
-                                    fitAddonRef.current.fit();
-                                    const { cols, rows } = xtermRef.current;
-                                    window.electron.terminal.resize(terminalIdRef.current, cols, rows);
-                                } catch (e) {
-                                    // Ignore resize errors if terminal is not ready
-                                    console.debug('Resize skipped:', e.message);
-                                }
-                            });
-                        }
-                    });
-
-                    if (terminalRef.current) {
-                        resizeObserver.observe(terminalRef.current);
-                    }
-
-                    // Store cleanup functions
-                    return () => {
+                    backendCleanup = () => {
                         unsubscribeData();
                         unsubscribeExit();
                     };
                 } else {
-                    term.write(`\x1b[31mFailed to create terminal: ${result.error}\x1b[0m\r\n`);
+                    term.writeln(`\x1b[31mFailed to create terminal: ${result.error}\x1b[0m`);
                 }
-            } catch (error) {
-                if (mounted) {
-                    term.write(`\x1b[31mError: ${error.message}\x1b[0m\r\n`);
-                }
+            } catch (err) {
+                term.writeln(`\x1b[31mError initializing terminal: ${err.message}\x1b[0m`);
             }
         };
 
-        const cleanupPromise = initTerminal();
+        // Observe resize to trigger init when visible
+        resizeObserver = new ResizeObserver((entries) => {
+            if (!isInitialized) {
+                for (const entry of entries) {
+                    if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                        initTerminal();
+                    }
+                }
+            } else {
+                // handle normal resize
+                for (const entry of entries) {
+                    if (entry.contentRect.width === 0 || entry.contentRect.height === 0) {
+                        return; // Skip fit if hidden/collapsed
+                    }
+                }
+
+                try {
+                    if (fitAddon) {
+                        fitAddon.fit();
+                        if (terminalIdRef.current && term) {
+                            window.electron.terminal.resize(terminalIdRef.current, term.cols, term.rows);
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+        });
+
+        resizeObserver.observe(terminalRef.current);
+
+
 
         return () => {
-            mounted = false;
-
+            // Cleanup
+            if (terminalIdRef.current && window.electron?.terminal) {
+                window.electron.terminal.kill(terminalIdRef.current);
+            }
             if (resizeObserver) {
                 resizeObserver.disconnect();
             }
-
-            cleanupPromise.then(cleanupFn => cleanupFn && cleanupFn());
-
-            if (terminalIdRef.current && window.electron?.terminal) {
-                // Optional: Don't kill terminal on tab switch if we want persistence
-                // But for now, we kill it as per existing logic
-                // window.electron.terminal.kill(terminalIdRef.current); 
+            if (backendCleanup) {
+                backendCleanup();
             }
-
-            if (xtermRef.current) {
-                try {
-                    xtermRef.current.dispose();
-                } catch (e) {
-                    // Ignore dispose errors
-                }
-                xtermRef.current = null;
+            if (term) {
+                term.dispose();
             }
+            isInitialized = false;
         };
-    }, [shellType, cwd]);
-
-    if (!window.electron?.terminal) {
-        return (
-            <div className="h-full w-full bg-[#0a0e14] flex items-center justify-center text-gray-400">
-                <div className="text-center px-4">
-                    <p className="text-sm mb-2">⚠️ Terminal is not available</p>
-                    <p className="text-xs text-gray-500">Please run with "npm run electron:dev"</p>
-                </div>
-            </div>
-        );
-    }
+    }, [cwd, shellType]);
 
     return <div ref={terminalRef} className="h-full w-full bg-[#0a0e14]" />;
 }
+

@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import FileTree from './FileTree'
 import SearchPanel from './SearchPanel'
 import GitPanel from './GitPanel'
-import ExtensionsPanel from './ExtensionsPanel'
+// ExtensionsPanel removed
+// import ExtensionsPanel from './ExtensionsPanel'
 import CodeEditor from './CodeEditor'
 import TabBar from './TabBar'
 import StatusBar from './StatusBar'
@@ -10,7 +11,8 @@ import SettingsPanel from './SettingsPanel'
 import ChatPanel from '../chat/ChatPanel'
 import Breadcrumbs from './Breadcrumbs'
 import Terminal from './Terminal'
-import { extensionLoader } from '../../utils/ExtensionLoader'
+// ExtensionLoader removed
+// import { extensionLoader } from '../../utils/ExtensionLoader'
 import ErrorBoundary from '../common/ErrorBoundary'
 
 import {
@@ -39,7 +41,7 @@ const Icons = {
   Files: () => <VscFiles className="w-5 h-5" />,
   Git: () => <VscSourceControl className="w-5 h-5" />,
   Debug: () => <VscDebugAlt className="w-5 h-5" />,
-  Extensions: () => <VscExtensions className="w-5 h-5" />,
+  // Extensions: () => <VscExtensions className="w-5 h-5" />,
   FolderOpen: () => <MdFolderOpen className="w-3 h-3" />,
   Plus: () => <MdAdd className="w-4 h-4" />,
   Check: () => <MdCheck className="w-3 h-3" />,
@@ -61,6 +63,7 @@ export default function EditorLayout() {
   const [activeActivity, setActiveActivity] = useState('explorer')
   const [showTerminalDropdown, setShowTerminalDropdown] = useState(false)
 
+  // Terminal State
   // Terminal State
   const [terminals, setTerminals] = useState([
     { id: '1', name: 'powershell', type: 'powershell' }
@@ -164,6 +167,23 @@ export default function EditorLayout() {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Git State
+  const [gitUser, setGitUser] = useState('Guest')
+
+  useEffect(() => {
+    const fetchGitUser = async () => {
+      if (window.electron?.git?.getConfig) {
+        try {
+          const name = await window.electron.git.getConfig('user.name')
+          if (name) setGitUser(name)
+        } catch (err) {
+          console.error('Failed to fetch git user:', err)
+        }
+      }
+    }
+    fetchGitUser()
   }, [])
 
   // --- File System Logic ---
@@ -607,8 +627,8 @@ export default function EditorLayout() {
     monacoInstanceRef.current = monaco
     // Expose monaco globally for ExtensionLoader
     window.monaco = monaco
-    // Load extensions once Monaco is ready
-    extensionLoader.loadExtensions()
+    // Extension loader initialization removed
+    // extensionLoader.loadExtensions()
   }, [])
 
   const scanProject = async () => {
@@ -688,6 +708,83 @@ export default function EditorLayout() {
       { label: 'Close Window', shortcut: 'Alt+F4' },
       { separator: true },
       { label: 'Exit' },
+    ],
+    Edit: [
+      { label: 'Undo', shortcut: 'Ctrl+Z' },
+      { label: 'Redo', shortcut: 'Ctrl+Y' },
+      { separator: true },
+      { label: 'Cut', shortcut: 'Ctrl+X' },
+      { label: 'Copy', shortcut: 'Ctrl+C' },
+      { label: 'Paste', shortcut: 'Ctrl+V' },
+      { separator: true },
+      { label: 'Find', shortcut: 'Ctrl+F' },
+      { label: 'Replace', shortcut: 'Ctrl+H' },
+      { separator: true },
+      { label: 'Find in Files', shortcut: 'Ctrl+Shift+F' },
+      { label: 'Replace in Files', shortcut: 'Ctrl+Shift+H' },
+    ],
+    Selection: [
+      { label: 'Select All', shortcut: 'Ctrl+A' },
+      { label: 'Expand Selection', shortcut: 'Shift+Alt+Right' },
+      { label: 'Shrink Selection', shortcut: 'Shift+Alt+Left' },
+      { separator: true },
+      { label: 'Copy Line Up', shortcut: 'Shift+Alt+Up' },
+      { label: 'Copy Line Down', shortcut: 'Shift+Alt+Down' },
+      { label: 'Move Line Up', shortcut: 'Alt+Up' },
+      { label: 'Move Line Down', shortcut: 'Alt+Down' },
+    ],
+    View: [
+      { label: 'Command Palette...', shortcut: 'Ctrl+Shift+P' },
+      { label: 'Open View...' },
+      { separator: true },
+      { label: 'Appearance', hasSubmenu: true },
+      { label: 'Editor Layout', hasSubmenu: true },
+      { separator: true },
+      { label: 'Explorer', shortcut: 'Ctrl+Shift+E' },
+      { label: 'Search', shortcut: 'Ctrl+Shift+F' },
+      { label: 'Source Control', shortcut: 'Ctrl+Shift+G' },
+      { label: 'Run', shortcut: 'Ctrl+Shift+D' },
+      { label: 'Extensions', shortcut: 'Ctrl+Shift+X' },
+      { separator: true },
+      { label: 'Problems', shortcut: 'Ctrl+Shift+M' },
+      { label: 'Output', shortcut: 'Ctrl+Shift+U' },
+      { label: 'Debug Console', shortcut: 'Ctrl+Shift+Y' },
+      { label: 'Terminal', shortcut: 'Ctrl+`' },
+    ],
+    Go: [
+      { label: 'Back', shortcut: 'Alt+Left' },
+      { label: 'Forward', shortcut: 'Alt+Right' },
+      { separator: true },
+      { label: 'Go to File...', shortcut: 'Ctrl+P' },
+      { label: 'Go to Symbol in Workspace...', shortcut: 'Ctrl+T' },
+      { separator: true },
+      { label: 'Go to Definition', shortcut: 'F12' },
+      { label: 'Go to Declaration' },
+      { label: 'Go to References', shortcut: 'Shift+F12' },
+      { separator: true },
+      { label: 'Go to Line/Column...', shortcut: 'Ctrl+G' },
+    ],
+    Run: [
+      { label: 'Start Debugging', shortcut: 'F5' },
+      { label: 'Run Without Debugging', shortcut: 'Ctrl+F5' },
+      { separator: true },
+      { label: 'Add Configuration...' },
+      { label: 'Toggle Breakpoint', shortcut: 'F9' },
+    ],
+    Terminal: [
+      { label: 'New Terminal', shortcut: 'Ctrl+Shift+`', action: () => handleNewTerminal() },
+      { label: 'Split Terminal', shortcut: 'Ctrl+Shift+5' },
+      { separator: true },
+      { label: 'Run Task...' },
+      { label: 'Configure Tasks...' },
+    ],
+    Help: [
+      { label: 'Welcome' },
+      { label: 'Show All Commands', shortcut: 'Ctrl+Shift+P' },
+      { label: 'Documentation' },
+      { label: 'Release Notes' },
+      { separator: true },
+      { label: 'About' },
     ]
   }
 
@@ -703,10 +800,10 @@ export default function EditorLayout() {
           <span className="text-xs text-gray-500 group-hover:text-green-400/70">Ctrl+,</span>
         </div>
         <div className="h-[1px] bg-[#333] my-1"></div>
-        <div className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group">
+        {/* <div className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group">
           <span>Extensions</span>
           <span className="text-xs text-gray-500 group-hover:text-green-400/70">Ctrl+Shift+X</span>
-        </div>
+        </div> */}
         <div className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group">
           <span>Open Keyboard Shortcuts</span>
           <span className="text-xs text-gray-500 group-hover:text-green-400/70">Ctrl+K Ctrl+S</span>
@@ -883,7 +980,7 @@ export default function EditorLayout() {
         </div>
 
         {showDropdown && (
-          <div className="absolute top-full right-0 mt-1 w-64 bg-[#1e1e1e] border border-[#333] rounded-lg shadow-2xl py-1 z-50">
+          <div className="absolute top-full right-0 mt-1 w-64 bg-[#1e1e1e]/20 backdrop-blur-md border border-[#333] rounded-lg shadow-2xl py-1 z-50">
             <div
               className="px-3 py-2 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 text-xs text-gray-300"
               onClick={() => { handleRun(); setShowDropdown(false); }}
@@ -909,13 +1006,18 @@ export default function EditorLayout() {
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0a0e14] text-gray-300 overflow-hidden font-sans selection:bg-blue-500/30">
       {/* Title Bar */}
-      <div className="h-10 bg-[#0a0e14] flex items-center justify-between px-4 border-b border-white/5 select-none draggable">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-4 text-xs text-gray-400">
+      {/* Title Bar */}
+      <div className="h-8 bg-[#050608] flex items-center justify-between px-2 border-b border-white/5 select-none draggable">
+        {/* Left: App Icon + Menu */}
+        <div className="flex items-center gap-3">
+          <div className="text-accent-blue pl-1">
+            <img src="/icon.png" alt="Yavin Logo" className="w-5 h-5 object-contain" />
+          </div>
+          <div className="flex items-center text-[13px] text-gray-400 no-drag">
             {['File', 'Edit', 'Selection', 'View', 'Go', 'Run', 'Terminal', 'Help'].map((label) => (
               <div key={label} className="relative">
                 <span
-                  className={`hover:text-white cursor-pointer transition-colors ${activeMenu === label ? 'text-white' : ''}`}
+                  className={`px-2 py-0.5 hover:text-white hover:bg-white/10 rounded cursor-pointer transition-colors ${activeMenu === label ? 'text-white bg-white/10' : ''}`}
                   onClick={() => setActiveMenu(activeMenu === label ? null : label)}
                 >
                   {label}
@@ -923,7 +1025,7 @@ export default function EditorLayout() {
                 {activeMenu === label && menuItems[label] && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setActiveMenu(null)}></div>
-                    <div className="absolute top-6 left-0 z-50 w-72 bg-[#1e1e1e]/20 backdrop-blur-md border border-[#333] rounded-lg shadow-2xl py-1 text-xs text-gray-300 font-sans">
+                    <div className="absolute top-7 left-0 z-50 w-72 bg-[#1e1e1e]/20 backdrop-blur-md border border-[#333] rounded-md shadow-2xl py-1 text-xs text-gray-300 font-sans">
                       {menuItems[label].map((item, index) => {
                         if (item.separator) {
                           return <div key={index} className="h-[1px] bg-[#333] my-1"></div>
@@ -931,7 +1033,7 @@ export default function EditorLayout() {
                         return (
                           <div
                             key={index}
-                            className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group"
+                            className="px-3 py-1.5 hover:bg-[#0060c0] hover:text-white cursor-pointer flex justify-between items-center group"
                             onClick={() => {
                               if (item.action) item.action()
                               setActiveMenu(null)
@@ -945,8 +1047,8 @@ export default function EditorLayout() {
                               )}
                               <span>{item.label}</span>
                             </div>
-                            {item.shortcut && <span className="text-xs text-gray-500 group-hover:text-green-400/70 ml-4">{item.shortcut}</span>}
-                            {item.hasSubmenu && <Icons.ChevronRight className="w-3 h-3 text-gray-500 group-hover:text-green-400/70" />}
+                            {item.shortcut && <span className="text-xs text-gray-500 group-hover:text-gray-200 ml-4">{item.shortcut}</span>}
+                            {item.hasSubmenu && <Icons.ChevronRight className="w-3 h-3 text-gray-500 group-hover:text-white" />}
                           </div>
                         )
                       })}
@@ -958,74 +1060,66 @@ export default function EditorLayout() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 mr-4">
-            <button className="text-xs text-accent-blue hover:text-blue-400 transition-colors font-medium">
-              Open Agent Manager
-            </button>
+        {/* Center: Title */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 text-xs text-gray-400 font-medium opacity-80">
+          Yavin v1.1.0 - Antigravity - {currentPath ? currentPath.split(/[/\\]/).pop() : 'Untitled'}
+        </div>
 
-            <div className="flex items-center gap-1 bg-white/5 rounded-md p-0.5 border border-white/10">
-              <button
-                onClick={() => setShowPrimarySidebar(!showPrimarySidebar)}
-                className={`p-1 rounded ${showPrimarySidebar ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                title="Toggle Primary Sidebar"
-              >
-                <Icons.LayoutSidebarLeft />
-              </button>
-              <button
-                onClick={() => setShowPanel(!showPanel)}
-                className={`p-1 rounded ${showPanel ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                title="Toggle Panel"
-              >
-                <Icons.LayoutBottom />
-              </button>
-              <button
-                onClick={() => setShowAgentSidebar(!showAgentSidebar)}
-                className={`p-1 rounded ${showAgentSidebar ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                title="Toggle Agent Sidebar"
-              >
-                <Icons.LayoutSidebarRight />
-              </button>
+        {/* Right: Controls + Window Actions */}
+        <div className="flex items-center gap-2 no-drag">
+          <button className="text-xs text-accent-blue hover:text-blue-400 transition-colors font-medium mr-2">
+            Open Agent Manager
+          </button>
+
+          <div className="flex items-center gap-1 mr-2 text-gray-400">
+            <button onClick={() => setShowPrimarySidebar(!showPrimarySidebar)} title="Toggle Primary Sidebar" className="hover:text-white"><Icons.LayoutSidebarLeft /></button>
+            <button onClick={() => setShowPanel(!showPanel)} title="Toggle Panel" className="hover:text-white"><Icons.LayoutBottom /></button>
+            <button onClick={() => setShowAgentSidebar(!showAgentSidebar)} title="Toggle Agent Sidebar" className="hover:text-white"><Icons.LayoutSidebarRight /></button>
+          </div>
+
+          <div className="relative mr-4">
+            <div
+              className={`text-gray-400 hover:text-white cursor-pointer transition-colors ${showSettings ? 'text-white' : ''}`}
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Icons.Settings />
             </div>
+            {showSettings && (
+              <SettingsMenu positionClass="top-8 right-0" onClose={() => setShowSettings(false)} />
+            )}
+          </div>
 
-            <button className="text-gray-400 hover:text-white transition-colors">
-              <Icons.Search />
-            </button>
-
-            <div className="w-[1px] h-4 bg-white/10"></div>
-
-            <button className="text-gray-400 hover:text-white transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4"><circle cx="12" cy="12" r="10" strokeWidth={2} /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></svg>
-            </button>
-
-            <div className="relative">
-              <button
-                className={`text-gray-400 hover:text-white transition-colors ${showSettingsMenu === 'header' ? 'text-white' : ''}`}
-                onClick={() => setShowSettingsMenu(showSettingsMenu === 'header' ? null : 'header')}
-              >
-                <Icons.Settings />
-              </button>
-              {showSettingsMenu === 'header' && (
-                <SettingsMenu positionClass="top-10 right-0" onClose={() => setShowSettingsMenu(null)} />
-              )}
+          <div className="relative mr-4">
+            <div
+              className="flex items-center gap-2 text-gray-400 hover:text-white cursor-pointer"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+            >
+              <div className="w-5 h-5 rounded-full bg-teal-900/50 flex items-center justify-center text-[10px] text-teal-400 border border-teal-500/30">S</div>
             </div>
+            {showProfileMenu && <ProfileMenu positionClass="top-8 right-0" onClose={() => setShowProfileMenu(false)} />}
+          </div>
 
-            <div className="relative">
-              <div
-                className="flex items-center gap-2 text-gray-400 hover:text-white cursor-pointer"
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-              >
-                <div className="w-5 h-5 rounded-full bg-teal-900/50 flex items-center justify-center text-[10px] text-teal-400 border border-teal-500/30">
-                  S
-                </div>
-                <Icons.ChevronDown />
-              </div>
-              {showProfileMenu && (
-                <ProfileMenu positionClass="top-8 right-0" onClose={() => setShowProfileMenu(false)} />
-              )}
+          {/* Window Controls */}
+          <div className="flex items-center h-8 -mr-2 pl-2 border-l border-white/5">
+            <div
+              className="w-10 h-8 flex items-center justify-center hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer transition-colors"
+              onClick={() => window.electron?.ipcRenderer?.send('window:minimize')}
+            >
+              <Icons.WindowMin />
+            </div>
+            <div
+              className="w-10 h-8 flex items-center justify-center hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer transition-colors"
+              onClick={() => window.electron?.ipcRenderer?.send('window:maximize')}
+            >
+              <Icons.WindowMax />
+            </div>
+            <div
+              className="w-10 h-8 flex items-center justify-center hover:bg-red-500 hover:text-white text-gray-400 cursor-pointer transition-colors"
+              onClick={() => window.electron?.ipcRenderer?.send('window:close')}
+            >
+              <Icons.WindowClose />
             </div>
           </div>
-          <div className="text-xs font-medium text-gray-500">Codudu - {currentPath ? currentPath.split(/[/\\]/).pop() : 'Untitled'}</div>
         </div>
       </div>
 
@@ -1037,7 +1131,7 @@ export default function EditorLayout() {
             <ActivityIcon icon={Icons.Search} id="search" label="Search" />
             <ActivityIcon icon={Icons.Git} id="git" label="Source Control" />
             <ActivityIcon icon={Icons.Debug} id="debug" label="Run and Debug" />
-            <ActivityIcon icon={Icons.Extensions} id="extensions" label="Extensions" />
+            {/* <ActivityIcon icon={Icons.Extensions} id="extensions" label="Extensions" /> */}
 
             <div className="flex-1"></div>
           </div>
@@ -1077,8 +1171,6 @@ export default function EditorLayout() {
                 />
               ) : activeActivity === 'git' ? (
                 <GitPanel rootPath={currentPath} />
-              ) : activeActivity === 'extensions' ? (
-                <ExtensionsPanel />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
                   {activeActivity.charAt(0).toUpperCase() + activeActivity.slice(1)} View
@@ -1138,6 +1230,7 @@ export default function EditorLayout() {
                     path={openTabs.find(t => t.id === activeTabId)?.path}
                     rootPath={currentPath}
                     selection={openTabs.find(t => t.id === activeTabId)?.selection}
+                    onCursorPositionChange={setCursorPosition}
                   />
                 </ErrorBoundary>
               ) : (
@@ -1340,7 +1433,7 @@ export default function EditorLayout() {
                       {terminals.map(term => (
                         <div
                           key={term.id}
-                          className={`absolute inset-0 ${activeTerminalId === term.id ? 'block' : 'hidden'}`}
+                          className={`absolute inset-0 bg-[#0a0e14] ${activeTerminalId === term.id ? 'z-10' : 'z-0'}`}
                         >
                           <Terminal name={term.name} cwd={currentPath} shellType={term.type} />
                         </div>
@@ -1385,11 +1478,7 @@ export default function EditorLayout() {
             </div>
           )}
 
-          <StatusBar
-            line={cursorPosition.line}
-            column={cursorPosition.column}
-            language={currentLanguage}
-          />
+
         </div>
 
         {/* Right Sidebar - Chat */}
@@ -1409,8 +1498,50 @@ export default function EditorLayout() {
         }
       </div >
 
-      {/* Settings Modal */}
-      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <StatusBar
+        line={cursorPosition.line}
+        column={cursorPosition.column}
+        language={(() => {
+          const activeTab = openTabs.find(t => t.id === activeTabId)
+          if (!activeTab) return 'Plain Text'
+          const name = activeTab.name.toLowerCase()
+          if (name.endsWith('.jsx')) return 'JavaScript JSX'
+          if (name.endsWith('.tsx')) return 'TypeScript JSX'
+          if (name.endsWith('.js')) return 'JavaScript'
+          if (name.endsWith('.ts')) return 'TypeScript'
+          if (name.endsWith('.html')) return 'HTML'
+          if (name.endsWith('.css')) return 'CSS'
+          if (name.endsWith('.json')) return 'JSON'
+          if (name.endsWith('.md')) return 'Markdown'
+          if (name.endsWith('.py')) return 'Python'
+          if (name.endsWith('.java')) return 'Java'
+          if (name.endsWith('.c')) return 'C'
+          if (name.endsWith('.cpp')) return 'C++'
+          if (name.endsWith('.go')) return 'Go'
+          if (name.endsWith('.rs')) return 'Rust'
+          if (name.endsWith('.php')) return 'PHP'
+          if (name.endsWith('.sql')) return 'SQL'
+          if (name.endsWith('.yaml') || name.endsWith('.yml')) return 'YAML'
+
+          return currentLanguage.charAt(0).toUpperCase() + currentLanguage.slice(1)
+        })()}
+        errorCount={problems.filter(p => p.severity === 8).length}
+        warningCount={problems.filter(p => p.severity === 4).length}
+        onBranchClick={() => {
+          setActiveActivity('git')
+          if (!showPrimarySidebar) setShowPrimarySidebar(true)
+        }}
+        onProblemsClick={() => {
+          setActivePanelTab('problems')
+          setShowPanel(!showPanel || activePanelTab !== 'problems')
+        }}
+        onFeedbackClick={() => window.open('https://github.com/salmanwnl44/Yavin-v1.1.0/issues', '_blank')}
+        gitUser={gitUser}
+      />
+
+
+      {/* Settings Modal - Removed to use dropdown only */}
+      {/* <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} /> */}
 
       {/* Confirmation Modal */}
       {confirmDialog && (

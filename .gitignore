@@ -12,8 +12,9 @@ node_modules/
 *.dmg
 *.pkg
 *.snap
+.vs
 *.AppImage
-
+.gitignore
 # Python
 __pycache__/
 *.pyc

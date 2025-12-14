@@ -1,11 +1,12 @@
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
 
 let pty;
 try {
     pty = require('node-pty');
 } catch (e) {
-    console.warn('node-pty not found. Terminal features will be disabled.');
+    console.warn('node-pty not found or failed to load. Terminal features will be disabled.', e);
 }
 
 class TerminalManager {
@@ -14,14 +15,9 @@ class TerminalManager {
         this.nextId = 1;
     }
 
-    /**
-     * Get available shells on the system
-     */
     getAvailableShells() {
         const shells = [];
-
         if (os.platform() === 'win32') {
-            // Windows shells
             const commonPaths = [
                 { name: 'PowerShell', path: 'powershell.exe', icon: 'powershell' },
                 { name: 'Command Prompt', path: 'cmd.exe', icon: 'cmd' },
@@ -29,67 +25,46 @@ class TerminalManager {
                 { name: 'WSL', path: 'wsl.exe', icon: 'linux' },
             ];
 
+            // Also check D: drive for Git Bash as seen in user's environment
+            if (fs.existsSync('D:\\Program Files\\Git\\bin\\bash.exe')) {
+                commonPaths.push({ name: 'Git Bash (D:)', path: 'D:\\Program Files\\Git\\bin\\bash.exe', icon: 'git' });
+            }
+
             commonPaths.forEach(shell => {
                 try {
-                    // For system shells (powershell, cmd, wsl), they're always available
-                    if (shell.path === 'powershell.exe' || shell.path === 'cmd.exe' || shell.path === 'wsl.exe') {
+                    if (['powershell.exe', 'cmd.exe', 'wsl.exe'].includes(shell.path)) {
                         shells.push(shell);
-                    } else {
-                        // For others, check if they exist
-                        const fs = require('fs');
-                        if (fs.existsSync(shell.path)) {
-                            shells.push(shell);
-                        }
+                    } else if (fs.existsSync(shell.path)) {
+                        shells.push(shell);
                     }
-                } catch (e) {
-                    // Skip if not available
-                }
+                } catch (e) { }
             });
         } else {
-            // Unix-like systems
             shells.push(
                 { name: 'Bash', path: '/bin/bash', icon: 'bash' },
-                { name: 'Zsh', path: '/bin/zsh', icon: 'zsh' },
-                { name: 'Fish', path: '/usr/bin/fish', icon: 'fish' }
+                { name: 'Zsh', path: '/bin/zsh', icon: 'zsh' }
             );
         }
-
         return shells;
     }
 
-    /**
-     * Create a new terminal instance
-     */
     createTerminal(options = {}) {
         if (!pty) {
             throw new Error('node-pty is not available');
         }
 
         const terminalId = this.nextId++;
-
-        // Determine shell
         let shell = options.shell;
         if (!shell) {
-            shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+            shell = os.platform() === 'win32' ? 'powershell.exe' : '/bin/bash';
         }
 
-        // Determine working directory with validation
-        let cwd = options.cwd || process.env.USERPROFILE || process.env.HOME || os.homedir();
-
-        // Validate and sanitize the working directory
-        const fs = require('fs');
-        try {
-            // Check if the path exists and is a directory
-            if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
-                console.warn(`Invalid working directory: ${cwd}, falling back to home directory`);
-                cwd = process.env.USERPROFILE || process.env.HOME || os.homedir();
-            }
-        } catch (err) {
-            console.warn(`Error validating working directory: ${err.message}, using home directory`);
-            cwd = process.env.USERPROFILE || process.env.HOME || os.homedir();
+        let cwd = options.cwd || os.homedir();
+        if (!fs.existsSync(cwd)) {
+            cwd = os.homedir();
         }
 
-        console.log(`Creating terminal with shell: ${shell}, cwd: ${cwd}`);
+        console.log(`Creating terminal ${terminalId}: shell=${shell}, cwd=${cwd}`);
 
         try {
             const ptyProcess = pty.spawn(shell, options.args || [], {
@@ -97,90 +72,74 @@ class TerminalManager {
                 cols: options.cols || 80,
                 rows: options.rows || 30,
                 cwd: cwd,
-                env: { ...process.env, ...options.env },
+                env: process.env
             });
 
             this.terminals.set(terminalId, {
                 id: terminalId,
                 process: ptyProcess,
                 shell: shell,
-                cwd: cwd,
+                cwd: cwd
             });
 
             return {
                 id: terminalId,
-                process: ptyProcess,
+                process: ptyProcess
             };
         } catch (error) {
-            console.error('Failed to spawn terminal:', error);
-            console.error('Shell:', shell);
-            console.error('CWD:', cwd);
-            console.error('Error code:', error.code);
-            console.error('Error message:', error.message);
+            console.error('Error spawning terminal:', error);
             throw error;
         }
     }
 
-    /**
-     * Get a terminal by ID
-     */
-    getTerminal(terminalId) {
-        return this.terminals.get(terminalId);
-    }
-
-    /**
-     * Write data to a terminal
-     */
     write(terminalId, data) {
         const terminal = this.terminals.get(terminalId);
         if (terminal && terminal.process) {
-            terminal.process.write(data);
+            try {
+                terminal.process.write(data);
+            } catch (e) {
+                console.error(`Error writing to terminal ${terminalId}:`, e);
+            }
         }
     }
 
-    /**
-     * Resize a terminal
-     */
     resize(terminalId, cols, rows) {
         const terminal = this.terminals.get(terminalId);
         if (terminal && terminal.process) {
-            terminal.process.resize(cols, rows);
+            try {
+                if (cols > 0 && rows > 0) {
+                    terminal.process.resize(cols, rows);
+                }
+            } catch (e) {
+                console.error(`Error resizing terminal ${terminalId}:`, e);
+            }
         }
     }
 
-    /**
-     * Kill a terminal
-     */
     kill(terminalId) {
         const terminal = this.terminals.get(terminalId);
-        if (terminal && terminal.process) {
-            try {
-                // Remove listeners to prevent data/exit events during kill
-                terminal.process.removeAllListeners('data');
-                terminal.process.removeAllListeners('exit');
-                terminal.process.kill();
-            } catch (error) {
-                console.warn(`Error killing terminal ${terminalId}:`, error.message);
+        if (terminal) {
+            if (terminal.process) {
+                try {
+                    // terminal.process.kill(); 
+                    // node-pty's kill might not be enough on Windows sometimes, 
+                    // but usually it works.
+                    // Destroy handle first?
+                    terminal.process.kill();
+                } catch (e) {
+                    console.warn(`Error killing terminal ${terminalId}:`, e);
+                }
             }
             this.terminals.delete(terminalId);
         }
     }
 
-    /**
-     * Kill all terminals
-     */
     killAll() {
-        this.terminals.forEach((terminal) => {
-            if (terminal.process) {
-                terminal.process.kill();
-            }
-        });
-        this.terminals.clear();
+        for (const id of this.terminals.keys()) {
+            this.kill(id);
+        }
     }
 
-    /**
-     * Get all terminal IDs
-     */
     getAllTerminalIds() {
         return Array.from(this.terminals.keys());
     }

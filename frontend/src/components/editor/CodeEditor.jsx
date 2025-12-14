@@ -2,7 +2,8 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import Editor, { useMonaco } from '@monaco-editor/react'
 import { HTMLHint } from 'htmlhint';
 import { CSSLint } from 'csslint';
-import { extensionLoader } from '../../utils/ExtensionLoader';
+// ExtensionLoader removed
+// import { extensionLoader } from '../../utils/ExtensionLoader';
 
 export default function CodeEditor({
   value = '',
@@ -14,7 +15,9 @@ export default function CodeEditor({
   path,
 
   rootPath,
-  selection // { line, column }
+
+  selection, // { line, column }
+  onCursorPositionChange
 }) {
   const editorRef = useRef(null)
   const [monacoInstance, setMonacoInstance] = useState(null)
@@ -213,7 +216,17 @@ export default function CodeEditor({
       },
       formatOnType: true,
       formatOnPaste: true
-    })
+    });
+
+    // Listen for cursor position changes
+    editor.onDidChangeCursorPosition((e) => {
+      if (onCursorPositionChange) {
+        onCursorPositionChange({
+          line: e.position.lineNumber,
+          column: e.position.column
+        })
+      }
+    });
 
     // Add custom keybindings
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -223,14 +236,14 @@ export default function CodeEditor({
       })
     })
 
-    // Wire extensions (grammars)
-    requestAnimationFrame(() => {
-      try {
-        extensionLoader.wireEditor(editor)
-      } catch (err) {
-        console.error('Failed to wire editor:', err)
-      }
-    })
+    // Wire extensions removed
+    // requestAnimationFrame(() => {
+    //   try {
+    //     extensionLoader.wireEditor(editor)
+    //   } catch (err) {
+    //     console.error('Failed to wire editor:', err)
+    //   }
+    // })
   }
 
   function handleEditorChange(value) {

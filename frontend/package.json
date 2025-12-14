@@ -16,7 +16,6 @@
     "dependencies": {
         "@monaco-editor/react": "^4.6.0",
         "@reduxjs/toolkit": "^2.0.0",
-        "adm-zip": "^0.5.16",
         "axios": "^1.6.0",
         "csslint": "^1.0.5",
         "date-fns": "^4.1.0",

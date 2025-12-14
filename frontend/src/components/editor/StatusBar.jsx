@@ -1,66 +1,126 @@
 import { useState } from 'react'
+import {
+  VscRemote,
+  VscSourceControl,
+  VscSync,
+  VscError,
+  VscWarning,
+  VscBell,
+  VscCheck,
+  VscJson,
+  VscBroadcast
+} from 'react-icons/vsc'
 
 export default function StatusBar({
   line = 1,
   column = 1,
   language = 'JavaScript',
   encoding = 'UTF-8',
-  lineEnding = 'LF'
+  lineEnding = 'CRLF',
+  errorCount = 0,
+  warningCount = 0,
+  onBranchClick,
+  onProblemsClick,
+  onFeedbackClick,
+  gitUser = 'Guest'
 }) {
   const [showLanguageSelector, setShowLanguageSelector] = useState(false)
 
-  const languages = [
-    'JavaScript', 'TypeScript', 'Python', 'Java', 'C++', 'Go', 'Rust',
-    'HTML', 'CSS', 'JSON', 'Markdown', 'YAML'
-  ]
+  // Mock data for things we don't have yet
+  const branchName = 'main*'
+  const indent = 'Spaces: 2'
 
   return (
-    <div className="flex items-center justify-between glass-panel border-t border-white/5 px-6 py-2 text-xs font-medium relative">
-      {/* Gradient underline effect */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-accent-blue via-accent-violet to-accent-gold opacity-50"></div>
+    <div className="h-6 bg-[#0a0e14] text-white flex items-center justify-between text-[11px] select-none font-sans z-50 border-t border-white/5">
+      {/* Left Section */}
+      <div className="flex items-center h-full">
+        {/* Remote */}
+        <div className="h-full px-3 flex items-center justify-center bg-[#2d8cba] hover:bg-[#2d8cba]/80 cursor-pointer transition-colors" title="Open Remote Window">
+          <VscRemote className="w-3.5 h-3.5" />
+        </div>
 
-      <div className="flex items-center space-x-6">
-        <div className="text-gray-400 flex items-center gap-2">
-          <span className="text-accent-blue">📍</span>
-          <span className="font-code">Ln {line}, Col {column}</span>
+        {/* Branch */}
+        <div
+          className="h-full px-2 flex items-center gap-1.5 hover:bg-white/10 cursor-pointer transition-colors"
+          onClick={onBranchClick}
+          title="Checkout Branch"
+        >
+          <VscSourceControl className="w-3 h-3" />
+          <span>{branchName}</span>
         </div>
-        <div className="text-gray-500 font-code">
-          {encoding}
+
+        {/* Sync */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors" title="Synchronize Changes">
+          <VscSync className="w-3 h-3" />
         </div>
-        <div className="text-gray-500 font-code">
-          {lineEnding}
+
+        {/* Diagnostics */}
+        <div
+          className="h-full px-2 flex items-center gap-3 hover:bg-white/10 cursor-pointer transition-colors ml-1"
+          onClick={onProblemsClick}
+          title="No Problems"
+        >
+          <div className="flex items-center gap-1">
+            <VscError className="w-3 h-3" />
+            <span>{errorCount}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <VscWarning className="w-3 h-3" />
+            <span>{warningCount}</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center space-x-6">
-        <div className="relative">
-          <button
-            onClick={() => setShowLanguageSelector(!showLanguageSelector)}
-            className="text-gray-400 hover:text-accent-blue transition-all duration-200 font-code flex items-center gap-2"
-          >
-            <span className="icon-glow">⚡</span>
-            <span>{language}</span>
-          </button>
-          {showLanguageSelector && (
-            <div className="absolute bottom-full right-0 mb-3 panel-elevated rounded-xl shadow-elevated overflow-hidden min-w-[160px] animate-slide-in">
-              {languages.map((lang, index) => (
-                <div
-                  key={lang}
-                  className="px-4 py-2 hover:bg-accent-blue/10 cursor-pointer text-gray-300 hover:text-accent-blue transition-all duration-200 border-l-2 border-transparent hover:border-accent-blue font-code"
-                  style={{ animationDelay: `${index * 20}ms` }}
-                  onClick={() => {
-                    setShowLanguageSelector(false)
-                  }}
-                >
-                  {lang}
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Right Section */}
+      <div className="flex items-center h-full">
+        {/* Language */}
+        <div className="h-full px-2 flex items-center gap-1.5 hover:bg-white/10 cursor-pointer transition-colors" onClick={() => setShowLanguageSelector(!showLanguageSelector)}>
+          <span className="font-medium text-[10px]">{'{ }'}</span>
+          <span>{language}</span>
         </div>
-        <div className="text-gradient-blue font-bold tracking-wide flex items-center gap-2">
-          <span className="icon-glow">⚡</span>
-          YAVIN 1
+
+        {/* Status Msg */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors hidden sm:flex">
+          <span className="opacity-90">Antigravity - Settings</span>
+        </div>
+
+        {/* Bell */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors">
+          <VscBell className="w-3.5 h-3.5" />
+        </div>
+
+        {/* Git User */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors hidden md:flex">
+          <span>{gitUser}</span>
+        </div>
+
+        {/* Cursor Position */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors">
+          <span>Ln {line}, Col {column}</span>
+        </div>
+
+        {/* Indentation */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors hidden sm:flex">
+          <span>{indent}</span>
+        </div>
+
+        {/* Encoding */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors hidden sm:flex">
+          <span>{encoding}</span>
+        </div>
+
+        {/* Line Ending */}
+        <div className="h-full px-2 flex items-center hover:bg-white/10 cursor-pointer transition-colors hidden sm:flex">
+          <span>{lineEnding}</span>
+        </div>
+
+        {/* Smile/Feedback */}
+        <div
+          className="h-full px-2.5 flex items-center hover:bg-white/10 cursor-pointer transition-colors"
+          onClick={onFeedbackClick}
+          title="Send Feedback"
+        >
+          <VscBroadcast className="w-3.5 h-3.5" />
         </div>
       </div>
     </div>
