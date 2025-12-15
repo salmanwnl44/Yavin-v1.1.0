@@ -25,7 +25,7 @@
         "monaco-editor-textmate": "^4.0.0",
         "monaco-languageclient": "^5.0.0",
         "monaco-textmate": "^3.0.1",
-        "node-pty": "^1.0.0",
+        "node-pty": "^1.1.0-beta42",
         "onigasm": "^2.2.5",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",

@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { useSettings, terminalThemes } from '../../contexts/SettingsContext';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 
-export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
+export default function Terminal({ name, cwd, shellType = 'powershell.exe', onReady, onExit }) {
+    const { settings } = useSettings();
     const terminalRef = useRef(null);
     const xtermRef = useRef(null);
     const fitAddonRef = useRef(null);
@@ -32,12 +34,7 @@ export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
             // Initialize XTerm
             term = new XTerm({
                 cursorBlink: true,
-                theme: {
-                    background: '#0a0e14',
-                    foreground: '#d4d4d4',
-                    cursor: '#ffffff',
-                    selectionBackground: 'rgba(255, 255, 255, 0.3)',
-                },
+                theme: terminalThemes[settings.terminal.theme || 'default'] || terminalThemes['default'],
                 fontFamily: 'Consolas, "Courier New", monospace',
                 fontSize: 14,
                 allowProposedApi: true
@@ -87,6 +84,7 @@ export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
 
                 if (result.success) {
                     terminalIdRef.current = result.id;
+                    if (onReady) onReady(result.id); // Notify parent of backend ID
 
                     // Listen for data
                     const unsubscribeData = window.electron.terminal.onData((id, data) => {
@@ -99,6 +97,7 @@ export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
                     const unsubscribeExit = window.electron.terminal.onExit((id, code) => {
                         if (id === terminalIdRef.current) {
                             term.writeln(`\r\n\x1b[33mTerminal exited with code ${code}\x1b[0m`);
+                            if (onExit) onExit(code);
                         }
                     });
 
@@ -168,8 +167,8 @@ export default function Terminal({ name, cwd, shellType = 'powershell.exe' }) {
             }
             isInitialized = false;
         };
-    }, [cwd, shellType]);
+    }, [cwd, shellType, settings.terminal.theme]);
 
-    return <div ref={terminalRef} className="h-full w-full bg-[#0a0e14]" />;
+    return <div ref={terminalRef} className="h-full w-full" style={{ backgroundColor: (terminalThemes[settings.terminal.theme || 'default'] || terminalThemes['default']).background }} />;
 }
 

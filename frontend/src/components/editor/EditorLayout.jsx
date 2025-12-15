@@ -14,6 +14,10 @@ import Terminal from './Terminal'
 // ExtensionLoader removed
 // import { extensionLoader } from '../../utils/ExtensionLoader'
 import ErrorBoundary from '../common/ErrorBoundary'
+import SettingsPage from './SettingsPage'
+import KeyboardShortcuts from './KeyboardShortcuts'
+
+
 
 import {
   MdMenu, MdSearch, MdSettings, MdPerson, MdFolderOpen, MdAdd, MdCheck
@@ -54,6 +58,7 @@ export default function EditorLayout() {
   const [editorContent, setEditorContent] = useState('')
   const [currentLanguage, setCurrentLanguage] = useState('javascript')
   const [showSettings, setShowSettings] = useState(false)
+  const [showSettingsPage, setShowSettingsPage] = useState(false)
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 })
 
   // Layout State
@@ -62,15 +67,34 @@ export default function EditorLayout() {
   const [showAgentSidebar, setShowAgentSidebar] = useState(true)
   const [activeActivity, setActiveActivity] = useState('explorer')
   const [showTerminalDropdown, setShowTerminalDropdown] = useState(false)
+  const [expandedFolders, setExpandedFolders] = useState(new Set())
+  const [gitStatus, setGitStatus] = useState(new Map()) // Map of file paths to git status (M, U, A, D, etc.)
 
   // Terminal State
   // Terminal State
   const [terminals, setTerminals] = useState([
-    { id: '1', name: 'powershell', type: 'powershell' }
+    { id: '1', name: 'cmd', type: 'cmd' }
   ])
   const [activeTerminalId, setActiveTerminalId] = useState('1')
+  const terminalsRef = useRef([])
 
-  const handleNewTerminal = (type = 'powershell') => {
+  useEffect(() => {
+    terminalsRef.current = terminals
+  }, [terminals])
+
+  const handleTerminalReady = (frontendId, backendId) => {
+    setTerminals(prev => prev.map(t =>
+      t.id === frontendId ? { ...t, backendId, dead: false } : t
+    ))
+  }
+
+  const handleTerminalExit = (frontendId) => {
+    setTerminals(prev => prev.map(t =>
+      t.id === frontendId ? { ...t, backendId: null, dead: true } : t
+    ))
+  }
+
+  const handleNewTerminal = (type = 'cmd') => {
     const newId = Math.random().toString(36).substr(2, 9)
     const newTerminal = {
       id: newId,
@@ -81,6 +105,7 @@ export default function EditorLayout() {
     setActiveTerminalId(newId)
     setShowTerminalDropdown(false)
     setShowPanel(true) // Ensure panel is visible
+    return newId
   }
 
   const handleCloseTerminal = (id, e) => {
@@ -185,6 +210,32 @@ export default function EditorLayout() {
     }
     fetchGitUser()
   }, [])
+
+  // Fetch git status when folder changes
+  useEffect(() => {
+    const fetchGitStatus = async () => {
+      if (currentPath && window.electron?.git) {
+        try {
+          const status = await window.electron.git.status(currentPath)
+          if (status && status.files) {
+            const statusMap = new Map()
+            status.files.forEach(file => {
+              // file.path is relative to repo root
+              // file.working_dir status: M=modified, A=added, D=deleted, ??=untracked
+              const fullPath = `${currentPath}\\${file.path}`.replace(/\//g, '\\')
+              statusMap.set(fullPath, file.working_dir || file.index)
+            })
+            setGitStatus(statusMap)
+          }
+        } catch (err) {
+          console.error('Failed to fetch git status:', err)
+          setGitStatus(new Map())
+        }
+      }
+    }
+    fetchGitStatus()
+  }, [currentPath])
+
 
   // --- File System Logic ---
   const readDirectory = async (dirHandle) => {
@@ -610,6 +661,82 @@ export default function EditorLayout() {
     }
   }
 
+  const handleRunCommand = async (customCmd) => {
+    // 1. Ensure Panel is open and on Terminal tab
+    setShowPanel(true)
+    setActivePanelTab('terminal')
+
+    let command = customCmd
+
+    // If no command provided, calculate it based on active tab
+    if (!command) {
+      const activeTab = openTabs.find(t => t.id === activeTabId)
+      if (!activeTab) return
+
+      const path = activeTab.path || activeTab.name
+      const quotedPath = `"${path}"`
+
+      switch (activeTab.language) {
+        case 'python': command = `python ${quotedPath}`; break;
+        case 'javascript': command = `node ${quotedPath}`; break;
+        case 'typescript': command = `ts-node ${quotedPath}`; break;
+        case 'c': command = `gcc ${quotedPath} -o "${path}.exe" && "${path}.exe"`; break;
+        case 'cpp': command = `g++ ${quotedPath} -o "${path}.exe" && "${path}.exe"`; break;
+        case 'java': command = `javac ${quotedPath} && java -cp "${path.substring(0, path.lastIndexOf('\\'))}" "${path.split(/[\\/]/).pop().replace('.java', '')}"`; break;
+        case 'go': command = `go run ${quotedPath}`; break;
+        case 'rust': command = `rustc ${quotedPath} && "${path.replace('.rs', '.exe')}"`; break;
+        case 'php': command = `php ${quotedPath}`; break;
+        case 'ruby': command = `ruby ${quotedPath}`; break;
+        case 'perl': command = `perl ${quotedPath}`; break;
+        case 'lua': command = `lua ${quotedPath}`; break;
+        case 'r': command = `Rscript ${quotedPath}`; break;
+        case 'html': command = `start ${quotedPath}`; break;
+        case 'powershell': command = `powershell -ExecutionPolicy Bypass -File ${quotedPath}`; break;
+        case 'batch': command = `${quotedPath}`; break;
+        case 'shell': command = `bash ${quotedPath}`; break;
+        default: command = `echo "No runner configured for ${activeTab.language}"`; break;
+      }
+    }
+
+    if (!command) return
+
+    // 2. Ensure a terminal exists
+    let targetTerminalId = activeTerminalId
+
+    // Check if the target terminal is alive (has backendId)
+    // If we have an active terminal but it died (backendId null), we should create a new one.
+    const activeTerm = terminalsRef.current.find(t => t.id === targetTerminalId)
+    const needsNewTerminal = !activeTerm || !activeTerm.backendId || terminalsRef.current.length === 0
+
+    if (needsNewTerminal) {
+      targetTerminalId = handleNewTerminal()
+    }
+
+    // Wait for the backend terminal to be ready
+    const waitForBackendId = async (frontendId) => {
+      let attempts = 0
+      while (attempts < 30) { // 3 seconds timeout
+        const term = terminalsRef.current.find(t => t.id === frontendId)
+        // If term disappeared or explicitly marked dead, stop
+        if (!term) return null
+        if (term.backendId) return term.backendId
+        await new Promise(r => setTimeout(r, 100))
+        attempts++
+      }
+      return null
+    }
+
+    const backendId = await waitForBackendId(targetTerminalId)
+
+    if (window.electron?.terminal && backendId) {
+      window.electron.terminal.write(backendId, command + '\r')
+    } else {
+      console.error("Failed to run command: Terminal failed to initialize.")
+      // Optional: Alert user
+      alert("Failed to start terminal. Please try again.")
+    }
+  }
+
   const handleEditorChange = (value) => {
     setEditorContent(value)
     setOpenTabs(openTabs.map(tab =>
@@ -765,8 +892,8 @@ export default function EditorLayout() {
       { label: 'Go to Line/Column...', shortcut: 'Ctrl+G' },
     ],
     Run: [
-      { label: 'Start Debugging', shortcut: 'F5' },
-      { label: 'Run Without Debugging', shortcut: 'Ctrl+F5' },
+      { label: 'Start Debugging', shortcut: 'F5', action: () => handleRunCommand() },
+      { label: 'Run Without Debugging', shortcut: 'Ctrl+F5', action: () => handleRunCommand() },
       { separator: true },
       { label: 'Add Configuration...' },
       { label: 'Toggle Breakpoint', shortcut: 'F9' },
@@ -792,10 +919,48 @@ export default function EditorLayout() {
     <>
       <div className="fixed inset-0 z-40" onClick={onClose}></div>
       <div className={`absolute z-50 w-72 bg-[#1e1e1e]/20 backdrop-blur-md border border-[#333] rounded-lg shadow-2xl py-1 text-xs text-gray-300 font-sans ${positionClass}`}>
-        <div className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group">
+        <div
+          className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group"
+          onClick={() => {
+            const settingsTab = {
+              id: 'settings',
+              name: 'Settings',
+              language: 'settings',
+              content: '',
+              modified: false,
+              icon: '⚙️',
+              isSettings: true
+            }
+            const existingTab = openTabs.find(t => t.id === 'settings')
+            if (!existingTab) {
+              setOpenTabs([...openTabs, settingsTab])
+            }
+            setActiveTabId('settings')
+            onClose()
+          }}
+        >
           <span>Editor Settings</span>
         </div>
-        <div className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group">
+        <div
+          className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group"
+          onClick={() => {
+            const settingsTab = {
+              id: 'settings',
+              name: 'Settings',
+              language: 'settings',
+              content: '',
+              modified: false,
+              icon: '⚙️',
+              isSettings: true
+            }
+            const existingTab = openTabs.find(t => t.id === 'settings')
+            if (!existingTab) {
+              setOpenTabs([...openTabs, settingsTab])
+            }
+            setActiveTabId('settings')
+            onClose()
+          }}
+        >
           <span>Open Antigravity User Settings</span>
           <span className="text-xs text-gray-500 group-hover:text-green-400/70">Ctrl+,</span>
         </div>
@@ -804,7 +969,26 @@ export default function EditorLayout() {
           <span>Extensions</span>
           <span className="text-xs text-gray-500 group-hover:text-green-400/70">Ctrl+Shift+X</span>
         </div> */}
-        <div className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group">
+        <div
+          className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group"
+          onClick={() => {
+            const shortcutsTab = {
+              id: 'keyboard-shortcuts',
+              name: 'Keyboard Shortcuts',
+              language: 'shortcuts',
+              content: '',
+              modified: false,
+              icon: '⌨️',
+              isShortcuts: true
+            }
+            const existingTab = openTabs.find(t => t.id === 'keyboard-shortcuts')
+            if (!existingTab) {
+              setOpenTabs([...openTabs, shortcutsTab])
+            }
+            setActiveTabId('keyboard-shortcuts')
+            onClose()
+          }}
+        >
           <span>Open Keyboard Shortcuts</span>
           <span className="text-xs text-gray-500 group-hover:text-green-400/70">Ctrl+K Ctrl+S</span>
         </div>
@@ -904,26 +1088,11 @@ export default function EditorLayout() {
   )
 
   const RunButton = ({ activeTab, onRun }) => {
-    const [isCompilerAvailable, setIsCompilerAvailable] = useState(false)
     const [showDropdown, setShowDropdown] = useState(false)
     const dropdownRef = useRef(null)
 
-    useEffect(() => {
-      const check = async () => {
-        if (!activeTab || !window.electron?.shell?.checkCompiler) {
-          setIsCompilerAvailable(false)
-          return
-        }
-
-        // Map language to compiler check key
-        let lang = activeTab.language
-        if (lang === 'javascript' || lang === 'typescript') lang = 'javascript' // Check node
-
-        const available = await window.electron.shell.checkCompiler(lang)
-        setIsCompilerAvailable(available)
-      }
-      check()
-    }, [activeTab])
+    // Always show if we have an active tab
+    if (!activeTab) return null
 
     useEffect(() => {
       const handleClickOutside = (event) => {
@@ -931,48 +1100,32 @@ export default function EditorLayout() {
           setShowDropdown(false)
         }
       }
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
 
-    if (!isCompilerAvailable) return null
+      if (showDropdown) {
+        document.addEventListener('mousedown', handleClickOutside)
+      }
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }, [showDropdown])
 
     const handleRun = () => {
-      if (!activeTab) return
-      let cmd = ''
-      const path = activeTab.path || activeTab.name // Fallback if path not set (unsaved)
-
-      // Quote path to handle spaces
-      const quotedPath = `"${path}"`
-
-      switch (activeTab.language) {
-        case 'python': cmd = `python ${quotedPath}`; break;
-        case 'javascript': cmd = `node ${quotedPath}`; break;
-        case 'typescript': cmd = `ts-node ${quotedPath}`; break;
-        case 'c': cmd = `gcc ${quotedPath} -o "${path}.exe" && "${path}.exe"`; break;
-        case 'cpp': cmd = `g++ ${quotedPath} -o "${path}.exe" && "${path}.exe"`; break;
-        case 'java': cmd = `javac ${quotedPath} && java "${path.replace('.java', '')}"`; break;
-        case 'go': cmd = `go run ${quotedPath}`; break;
-        case 'rust': cmd = `rustc ${quotedPath} && "${path.replace('.rs', '.exe')}"`; break;
-        case 'php': cmd = `php ${quotedPath}`; break;
-      }
-
-      if (cmd) onRun(cmd)
+      onRun()
     }
 
     return (
       <div className="flex items-center mr-2 relative" ref={dropdownRef}>
-        <div className="flex items-center bg-green-600/10 hover:bg-green-600/20 text-green-400 rounded-md border border-green-600/30 transition-colors">
+        <div className="flex items-center text-green-500 hover:text-green-400 rounded-md transition-colors">
           <button
-            className="p-1.5 hover:bg-green-600/20 rounded-l-md transition-colors"
+            className="p-1.5 hover:bg-white/10 rounded-l-md transition-colors"
             title="Run Code"
             onClick={handleRun}
           >
             <VscDebugStart className="w-4 h-4" />
           </button>
-          <div className="w-[1px] h-4 bg-green-600/30"></div>
+          <div className="w-[1px] h-4 bg-white/10"></div>
           <button
-            className="p-1.5 hover:bg-green-600/20 rounded-r-md transition-colors"
+            className="p-1.5 hover:bg-white/10 rounded-r-md transition-colors"
             onClick={() => setShowDropdown(!showDropdown)}
           >
             <VscChevronDown className="w-3 h-3" />
@@ -985,13 +1138,30 @@ export default function EditorLayout() {
               className="px-3 py-2 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 text-xs text-gray-300"
               onClick={() => { handleRun(); setShowDropdown(false); }}
             >
-              <VscDebugStart className="w-3 h-3 text-green-400" />
-              <span>Run {activeTab.language === 'python' ? 'Python File' : 'Code'}</span>
+              <VscDebugStart className="w-3 h-3 text-white" />
+              <span>Run File</span>
             </div>
-            <div className="px-3 py-2 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 text-xs text-gray-300">
-              <VscDebugStart className="w-3 h-3 text-gray-500" />
-              <span>Run in Dedicated Terminal</span>
+
+            <div
+              className="px-3 py-2 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 text-xs text-gray-300"
+              onClick={() => {
+                let debugCmd = ''
+                const path = activeTab.path || activeTab.name
+                const quotedPath = `"${path}"`
+                switch (activeTab.language) {
+                  case 'javascript': debugCmd = `node --inspect-brk ${quotedPath}`; break;
+                  case 'typescript': debugCmd = `node --inspect-brk -r ts-node/register ${quotedPath}`; break;
+                  case 'python': debugCmd = `python -m pdb ${quotedPath}`; break;
+                  default: debugCmd = `echo "Debugging not configured for ${activeTab.language}"`; break;
+                }
+                onRun(debugCmd)
+                setShowDropdown(false)
+              }}
+            >
+              <VscDebugStart className="w-3 h-3 text-accent-red" />
+              <span>Debug File</span>
             </div>
+
             <div className="h-[1px] bg-[#333] my-1"></div>
             <div className="px-3 py-2 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 text-xs text-gray-300">
               <Icons.Settings className="w-3 h-3" />
@@ -1033,7 +1203,7 @@ export default function EditorLayout() {
                         return (
                           <div
                             key={index}
-                            className="px-3 py-1.5 hover:bg-[#0060c0] hover:text-white cursor-pointer flex justify-between items-center group"
+                            className="px-3 py-1.5 hover:bg-[#2a2d2e] hover:text-green-400 cursor-pointer flex justify-between items-center group"
                             onClick={() => {
                               if (item.action) item.action()
                               setActiveMenu(null)
@@ -1047,8 +1217,8 @@ export default function EditorLayout() {
                               )}
                               <span>{item.label}</span>
                             </div>
-                            {item.shortcut && <span className="text-xs text-gray-500 group-hover:text-gray-200 ml-4">{item.shortcut}</span>}
-                            {item.hasSubmenu && <Icons.ChevronRight className="w-3 h-3 text-gray-500 group-hover:text-white" />}
+                            {item.shortcut && <span className="text-xs text-gray-500 group-hover:text-green-400/70 ml-4">{item.shortcut}</span>}
+                            {item.hasSubmenu && <Icons.ChevronRight className="w-3 h-3 text-gray-500 group-hover:text-green-400/70" />}
                           </div>
                         )
                       })}
@@ -1060,16 +1230,17 @@ export default function EditorLayout() {
           </div>
         </div>
 
-        {/* Center: Title */}
-        <div className="absolute left-1/2 transform -translate-x-1/2 text-xs text-gray-400 font-medium opacity-80">
-          Yavin v1.1.0 - Antigravity - {currentPath ? currentPath.split(/[/\\]/).pop() : 'Untitled'}
-        </div>
+
 
         {/* Right: Controls + Window Actions */}
         <div className="flex items-center gap-2 no-drag">
-          <button className="text-xs text-accent-blue hover:text-blue-400 transition-colors font-medium mr-2">
-            Open Agent Manager
-          </button>
+          <RunButton
+            activeTab={openTabs.find(t => t.id === activeTabId)}
+            onRun={handleRunCommand}
+          />
+
+
+
 
           <div className="flex items-center gap-1 mr-2 text-gray-400">
             <button onClick={() => setShowPrimarySidebar(!showPrimarySidebar)} title="Toggle Primary Sidebar" className="hover:text-white"><Icons.LayoutSidebarLeft /></button>
@@ -1130,8 +1301,6 @@ export default function EditorLayout() {
             <ActivityIcon icon={Icons.Files} id="explorer" label="Explorer" />
             <ActivityIcon icon={Icons.Search} id="search" label="Search" />
             <ActivityIcon icon={Icons.Git} id="git" label="Source Control" />
-            <ActivityIcon icon={Icons.Debug} id="debug" label="Run and Debug" />
-            {/* <ActivityIcon icon={Icons.Extensions} id="extensions" label="Extensions" /> */}
 
             <div className="flex-1"></div>
           </div>
@@ -1158,11 +1327,24 @@ export default function EditorLayout() {
                   onToggleFolder={handleToggleFolder}
                   onCreateItem={handleCreateItem}
                   onRefresh={handleRefreshExplorer}
-                  onCollapseAll={handleCollapseAll}
+                  onCollapseAll={() => setExpandedFolders(new Set())}
                   onRename={handleRename}
                   onDelete={handleDelete}
                   collapseSignal={collapseSignal}
                   problems={problems}
+                  expandedFolders={expandedFolders}
+                  onToggleFolderExpand={(folderId) => {
+                    setExpandedFolders(prev => {
+                      const newSet = new Set(prev)
+                      if (newSet.has(folderId)) {
+                        newSet.delete(folderId)
+                      } else {
+                        newSet.add(folderId)
+                      }
+                      return newSet
+                    })
+                  }}
+                  gitStatus={gitStatus}
                 />
               ) : activeActivity === 'search' ? (
                 <SearchPanel
@@ -1190,26 +1372,6 @@ export default function EditorLayout() {
                   onTabClose={handleTabClose}
                 />
               </div>
-              <RunButton
-                activeTab={openTabs.find(t => t.id === activeTabId)}
-                onRun={(cmd) => {
-                  // Find active terminal or create one
-                  let termId = activeTerminalId;
-                  if (!termId && terminals.length > 0) termId = terminals[0].id;
-                  if (!termId) {
-                    handleNewTerminal();
-                    // We need to wait for state update, but for now let's just use the newly created one if possible
-                    // Ideally handleNewTerminal returns the ID or we wait. 
-                    // For simplicity, let's assume user has a terminal or we just log for now if none.
-                    return;
-                  }
-
-                  // Send command to terminal
-                  if (window.electron?.terminal) {
-                    window.electron.terminal.write(termId, cmd + '\r\n');
-                  }
-                }}
-              />
             </div>
 
             {/* Breadcrumbs */}
@@ -1219,20 +1381,32 @@ export default function EditorLayout() {
 
             <div className="flex-1 relative bg-deepest/50 backdrop-blur-sm min-h-0">
               {activeTabId ? (
-                <ErrorBoundary>
-                  <CodeEditor
-                    key={activeTabId}
-                    value={editorContent}
-                    onChange={handleEditorChange}
-                    onValidate={handleValidate}
-                    onMonacoReady={handleMonacoReady}
-                    language={currentLanguage}
-                    path={openTabs.find(t => t.id === activeTabId)?.path}
-                    rootPath={currentPath}
-                    selection={openTabs.find(t => t.id === activeTabId)?.selection}
-                    onCursorPositionChange={setCursorPosition}
-                  />
-                </ErrorBoundary>
+                openTabs.find(t => t.id === activeTabId)?.isSettings ? (
+                  <SettingsPage onClose={() => {
+                    setOpenTabs(openTabs.filter(t => t.id !== 'settings'))
+                    setActiveTabId(openTabs.filter(t => t.id !== 'settings')[0]?.id || null)
+                  }} />
+                ) : openTabs.find(t => t.id === activeTabId)?.isShortcuts ? (
+                  <KeyboardShortcuts onClose={() => {
+                    setOpenTabs(openTabs.filter(t => t.id !== 'keyboard-shortcuts'))
+                    setActiveTabId(openTabs.filter(t => t.id !== 'keyboard-shortcuts')[0]?.id || null)
+                  }} />
+                ) : (
+                  <ErrorBoundary>
+                    <CodeEditor
+                      key={activeTabId}
+                      value={editorContent}
+                      onChange={handleEditorChange}
+                      onValidate={handleValidate}
+                      onMonacoReady={handleMonacoReady}
+                      language={currentLanguage}
+                      path={openTabs.find(t => t.id === activeTabId)?.path}
+                      rootPath={currentPath}
+                      selection={openTabs.find(t => t.id === activeTabId)?.selection}
+                      onCursorPositionChange={setCursorPosition}
+                    />
+                  </ErrorBoundary>
+                )
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500 bg-[#0a0e14]">
                   <VscFiles className="w-16 h-16 mb-4 opacity-20" />
@@ -1435,7 +1609,13 @@ export default function EditorLayout() {
                           key={term.id}
                           className={`absolute inset-0 bg-[#0a0e14] ${activeTerminalId === term.id ? 'z-10' : 'z-0'}`}
                         >
-                          <Terminal name={term.name} cwd={currentPath} shellType={term.type} />
+                          <Terminal
+                            name={term.name}
+                            cwd={currentPath}
+                            shellType={term.type}
+                            onReady={(backendId) => handleTerminalReady(term.id, backendId)}
+                            onExit={() => handleTerminalExit(term.id)}
+                          />
                         </div>
                       ))}
                       {terminals.length === 0 && (

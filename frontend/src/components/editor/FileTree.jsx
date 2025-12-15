@@ -7,7 +7,7 @@ import {
 import {
   SiReact, SiJavascript, SiTypescript, SiCss3, SiHtml5, SiJson, SiPython, SiDocker, SiMarkdown, SiGit, SiGnubash
 } from 'react-icons/si'
-import { VscChevronRight, VscChevronDown, VscCollapseAll } from 'react-icons/vsc'
+import { VscChevronRight, VscChevronDown, VscCollapseAll, VscFolder, VscFolderOpened } from 'react-icons/vsc'
 
 // Icons mapping
 const getFileIcon = (name, type) => {
@@ -15,24 +15,25 @@ const getFileIcon = (name, type) => {
 
   const lowerName = name.toLowerCase()
 
-  if (lowerName.endsWith('.jsx') || lowerName.endsWith('.tsx')) return <SiReact className="text-[#61DAFB]" />
-  if (lowerName.endsWith('.js')) return <SiJavascript className="text-[#F7DF1E]" />
-  if (lowerName.endsWith('.ts')) return <SiTypescript className="text-[#3178C6]" />
-  if (lowerName.endsWith('.css')) return <SiCss3 className="text-[#1572B6]" />
-  if (lowerName.endsWith('.html')) return <SiHtml5 className="text-[#E34F26]" />
-  if (lowerName.endsWith('.json')) return <SiJson className="text-[#F7DF1E]" /> // JSON often yellow/gold
-  if (lowerName.includes('docker')) return <SiDocker className="text-[#2496ED]" />
-  if (lowerName.endsWith('.py')) return <SiPython className="text-[#3776AB]" />
-  if (lowerName.endsWith('.md')) return <SiMarkdown className="text-[#000000] dark:text-white" />
-  if (lowerName.startsWith('.git')) return <SiGit className="text-[#F05032]" />
-  if (lowerName.endsWith('.sh')) return <SiGnubash className="text-[#4EAA25]" />
+  if (lowerName.endsWith('.jsx') || lowerName.endsWith('.tsx')) return <SiReact className="text-[#61DAFB] text-xs" />
+  if (lowerName.endsWith('.js')) return <SiJavascript className="text-[#F7DF1E] text-xs" />
+  if (lowerName.endsWith('.ts')) return <SiTypescript className="text-[#3178C6] text-xs" />
+  if (lowerName.endsWith('.css')) return <SiCss3 className="text-[#1572B6] text-xs" />
+  if (lowerName.endsWith('.html')) return <SiHtml5 className="text-[#E34F26] text-xs" />
+  if (lowerName.endsWith('.json')) return <SiJson className="text-[#F7DF1E] text-xs" /> // JSON often yellow/gold
+  if (lowerName.includes('docker')) return <SiDocker className="text-[#2496ED] text-xs" />
+  if (lowerName.endsWith('.py')) return <SiPython className="text-[#3776AB] text-xs" />
+  if (lowerName.endsWith('.md')) return <SiMarkdown className="text-[#000000] dark:text-white text-xs" />
+  if (lowerName.startsWith('.git')) return <SiGit className="text-[#F05032] text-xs" />
+  if (lowerName.endsWith('.sh')) return <SiGnubash className="text-[#4EAA25] text-xs" />
 
-  return <MdInsertDriveFile className="text-gray-500" />
+  return <MdInsertDriveFile className="text-gray-500 text-xs" />
 }
 
 const Icons = {
-  Folder: () => <MdFolder className="w-5 h-5 text-[#FFCA28]" />, // Material Folder Yellow
-  FolderOpen: () => <MdFolderOpen className="w-5 h-5 text-[#FFCA28]" />,
+  Folder: () => <VscFolder className="w-4 h-4 text-gray-400" />,
+  FolderOpen: () => <VscFolderOpened className="w-4 h-4 text-gray-400" />,
+  File: () => <MdInsertDriveFile className="w-3.5 h-3.5 text-gray-400" />,
   ChevronRight: () => <VscChevronRight className="w-4 h-4" />,
   ChevronDown: () => <VscChevronDown className="w-4 h-4" />,
   NewFile: () => <MdNoteAdd className="w-4 h-4" />,
@@ -106,30 +107,22 @@ const FileCreationInput = ({ type, initialValue = '', onCommit, onCancel, level 
   )
 }
 
-const FileNode = ({ node, level, onSelect, selectedId, onToggleFolder, collapseSignal, problems = [], creationState, onCreateItem, onCancelCreation, renamingId, onRenameCommit, onCancelRename, onContextMenu }) => {
-  const [isOpen, setIsOpen] = useState(false)
-
-  // Listen for collapse signal
-  useEffect(() => {
-    if (collapseSignal > 0) {
-      setIsOpen(false)
-    }
-  }, [collapseSignal])
+const FileNode = ({ node, level, onSelect, selectedId, onToggleFolder, collapseSignal, problems = [], creationState, onCreateItem, onCancelCreation, renamingId, onRenameCommit, onCancelRename, onContextMenu, expandedFolders, onToggleFolderExpand, gitStatus }) => {
+  const isOpen = expandedFolders?.has(node.id) || false
 
   // Auto-expand if creating inside this folder
   useEffect(() => {
-    if (creationState && creationState.parentId === node.id && node.type === 'folder') {
-      setIsOpen(true)
+    if (creationState && creationState.parentId === node.id && node.type === 'folder' && !isOpen) {
+      onToggleFolderExpand?.(node.id)
     }
-  }, [creationState, node.id, node.type])
+  }, [creationState, node.id, node.type, isOpen, onToggleFolderExpand])
 
   const handleToggle = async (e) => {
     e.stopPropagation()
     onSelect(node)
     if (node.type === 'folder') {
-      const newIsOpen = !isOpen
-      setIsOpen(newIsOpen)
-      if (newIsOpen && onToggleFolder && (!node.children || node.children.length === 0)) {
+      onToggleFolderExpand?.(node.id)
+      if (!isOpen && onToggleFolder && (!node.children || node.children.length === 0)) {
         await onToggleFolder(node)
       }
     }
@@ -210,9 +203,16 @@ const FileNode = ({ node, level, onSelect, selectedId, onToggleFolder, collapseS
           )}
         </span>
 
-        <span className="truncate font-code text-[13px] leading-6 flex-1">
+        <span className="truncate font-code text-[12px] leading-5 flex-1">
           {node.name}
         </span>
+
+        {/* Git Status Indicator */}
+        {node.type === 'file' && gitStatus?.get(node.path) && (
+          <span className="ml-2 text-[10px] font-bold text-gray-400">
+            {gitStatus.get(node.path)}
+          </span>
+        )}
 
         {/* Error Indicator */}
         {errorCount > 0 && (
@@ -251,6 +251,9 @@ const FileNode = ({ node, level, onSelect, selectedId, onToggleFolder, collapseS
               onRenameCommit={onRenameCommit}
               onCancelRename={onCancelRename}
               onContextMenu={onContextMenu}
+              expandedFolders={expandedFolders}
+              onToggleFolderExpand={onToggleFolderExpand}
+              gitStatus={gitStatus}
             />
           ))}
         </div>
@@ -259,7 +262,7 @@ const FileNode = ({ node, level, onSelect, selectedId, onToggleFolder, collapseS
   )
 }
 
-export default function FileTree({ files, onFileSelect, onOpenFolder, isLoading, onCloseFolder, onToggleFolder, onCreateItem, onRefresh, onCollapseAll, onRename, onDelete, collapseSignal, problems = [] }) {
+export default function FileTree({ files, onFileSelect, onOpenFolder, isLoading, onCloseFolder, onToggleFolder, onCreateItem, onRefresh, onCollapseAll, onRename, onDelete, collapseSignal, problems = [], expandedFolders, onToggleFolderExpand, gitStatus = new Map() }) {
   const [selectedId, setSelectedId] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
   const [isRootExpanded, setIsRootExpanded] = useState(true)
@@ -549,6 +552,9 @@ export default function FileTree({ files, onFileSelect, onOpenFolder, isLoading,
               onRenameCommit={handleRenameCommit}
               onCancelRename={() => setRenamingId(null)}
               onContextMenu={handleContextMenu}
+              expandedFolders={expandedFolders}
+              onToggleFolderExpand={onToggleFolderExpand}
+              gitStatus={gitStatus}
             />
           ))}
         </div>

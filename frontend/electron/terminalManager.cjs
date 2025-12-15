@@ -72,7 +72,8 @@ class TerminalManager {
                 cols: options.cols || 80,
                 rows: options.rows || 30,
                 cwd: cwd,
-                env: process.env
+                env: process.env,
+                useConpty: false
             });
 
             this.terminals.set(terminalId, {
