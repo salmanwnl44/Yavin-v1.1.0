@@ -1,3 +1,4 @@
+do not use this file and its context
 Architectural Blueprint for an Autonomous SWE-Agent Code Editor
 I. Strategic Overview and Agent Architecture Foundation
 The development of an autonomous Software Engineering Agent (SWE-Agent), often referred to as an Agentic Code Editor (ACE) akin to Devin or AntiGravity , necessitates a robust, multi-component architecture that transcends traditional reactive coding assistants. This system must exhibit true autonomy, enabling it to execute complex, multi-step solutions, manage its internal state, and iteratively refine its work through self-correction and testing. The goal is to create a digital worker capable of independent operation within the GitHub pull request workflow.   
