@@ -1,4 +1,4 @@
-# YAVIN v1.1.0 - AI Editor 
+# YAVIN v1.2.0 - AI Editor 
 
 This repository contains a scaffold for the YAVIN 1 AI-powered code editor project.
 
